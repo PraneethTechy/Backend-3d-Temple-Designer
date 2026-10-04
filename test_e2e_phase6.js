@@ -5,7 +5,7 @@ import { generateSimulationPaths } from '../client/src/features/simulation/simul
 import { SimulationEngine } from '../client/src/features/simulation/simulationEngine.js';
 import { generatePlanSummaryText } from '../client/src/utils/exportPlan.js';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'http://localhost:5001/api';
 
 async function runEndToEndVerification() {
   console.log('===========================================================');

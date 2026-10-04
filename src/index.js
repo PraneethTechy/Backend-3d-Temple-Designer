@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
 import { generateAiLayoutRecommendations } from './services/ai/layoutAgent.js';
 import { optimizeCurrentLayout } from './services/ai/recommendationAgent.js';
+import { planCapacityExpansion } from './services/ai/capacityExpansionAgent.js';
 import { isOpenRouterConfigured, getOpenRouterModel } from './services/ai/openrouter.service.js';
 import planRoutes from './routes/planRoutes.js';
 
@@ -15,10 +16,44 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config(); // fallback to cwd
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
-// Middleware
-app.use(cors());
+// Dynamic Environment-based CORS Configuration
+const rawOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  process.env.CLIENT_URL,
+  process.env.CORS_ORIGIN,
+].filter(Boolean);
+
+const allowedOrigins = rawOrigins
+  .flatMap((o) => o.split(','))
+  .map((o) => o.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. server-to-server, curl, Postman)
+      if (!origin) return callback(null, true);
+
+      const isAllowed =
+        allowedOrigins.includes('*') ||
+        allowedOrigins.includes(origin) ||
+        /^http:\/\/localhost(:\d+)?$/.test(origin) ||
+        /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin);
+
+      if (isAllowed) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 app.use(express.json());
 
 // Scaffolded Health Endpoint
@@ -42,6 +77,14 @@ app.get('/api/ai/status', (req, res) => {
 app.post('/api/ai/layout', async (req, res) => {
   try {
     const { scene, prompt = '', mode = 'generate', allowFallback = true } = req.body || {};
+
+    if (mode === 'capacity_expansion') {
+      const result = await planCapacityExpansion(req.body, { allowFallback });
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      return res.json(result);
+    }
 
     if (!scene || !scene.site) {
       return res.status(400).json({

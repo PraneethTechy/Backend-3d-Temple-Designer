@@ -19,31 +19,6 @@ CRITICAL RULES:
 export function buildLayoutGenerationPrompt(scene, userRequirement = '') {
   const { temple, site, requirements } = scene;
 
-  const isLargeCampus =
-    site.length >= 140 &&
-    site.width >= 100 &&
-    ((requirements?.peakVisitors >= 5000) ||
-      /festival|100k|campus|multi-zone|distributed/i.test(userRequirement));
-
-  const campusDirective = isLargeCampus
-    ? `
-CAMPUS SCALE DETECTED (${site.length}m × ${site.width}m site, Peak Demand: ${requirements?.peakVisitors || 15000}):
-For this large-scale campus / festival scenario, DO NOT propose a basic single serpentine queue in an empty field!
-You MUST propose "template": "campus" as your primary recommendation (Option 1).
-The "campus" template activates the 5-Gopuram Distributed Multi-Zone Crowd System:
-- 4 Outer Gopurams: North (Primary Entry ~40%), West (Secondary Entry ~30%), East (Secondary Entry ~30%), South (Primary Exit)
-- 1 Central Main Raja Gopuram (34m) & Maha Garbhagriha Sanctum (with 4 controlled approach corridors D1..D4)
-- 8 Queue Patterns across Zones A..H: North Serpentine, West Switchback, East Switchback, 16 DFMD Parallel Security Channels (6 North, 5 West, 5 East), Holding Circulation Loops, Radial Fan approach, Split-Merge, Post-Darshan Dispersal Plaza, and Dynamic Surge Overflow Reserve Bay.
-- For Option 1, use: "template": "campus", "lanes": 16, "entrances": 14, "exits": 6, "security": true, "waitingArea": true, "multiZone": true.
-`
-    : '';
-
-  const exampleTemplate = isLargeCampus ? 'campus' : 'parallel';
-  const exampleLanes = isLargeCampus ? 16 : Math.min(6, Math.max(2, Math.floor((site.width - 6) / 3.5)));
-  const exampleEntrances = isLargeCampus ? 14 : 1;
-  const exampleExits = isLargeCampus ? 6 : 1;
-  const exampleWaiting = isLargeCampus;
-
   return `SITE SPECIFICATIONS:
 - Temple Name: "${temple?.name || 'Sanctuary Precinct'}"
 - Available Crowd Space Footprint: ${site.length}m (Length) × ${site.width}m (Width)
@@ -51,18 +26,22 @@ The "campus" template activates the 5-Gopuram Distributed Multi-Zone Crowd Syste
 - Daily Expected Visitors: ${requirements?.expectedVisitors?.toLocaleString() || 'N/A'}
 - Peak Concurrent Visitors: ${requirements?.peakVisitors?.toLocaleString() || 'N/A'}
 
-USER INSTRUCTIONS:
+USER ARCHITECTURAL INSTRUCTIONS:
 "${userRequirement || 'Design an optimal queue system for peak crowd management within this site.'}"
-${campusDirective}
-TASK:
-Propose up to 3 meaningfully different layout options that physically fit within ${site.length}m × ${site.width}m:
-- Option 1: ${isLargeCampus ? 'Distributed Multi-Zone Temple Campus (template: "campus")' : 'High-throughput topology (e.g. Parallel or Serpentine)'}
-- Option 2: Continuous flow topology (e.g. U-Shape or Serpentine with alternate spacing)
-- Option 3: Balanced or Split branch topology (e.g. Split or Parallel)
 
-Allowed templates: "parallel", "serpentine", "u_shape", "split"${isLargeCampus ? ', "campus"' : ''}.
+TASK:
+Analyze the USER ARCHITECTURAL INSTRUCTIONS carefully. The generated layout MUST be determined by the prompt:
+- If the user specifies a specific number of gopurams (e.g. 4 gopurams: North, South, East, West, or 6 gopurams, or 2 gopurams), you MUST populate "architecture.gopuramCount" and "architecture.gopuramDirections" accordingly.
+- If the user specifies a specific number of entrances (e.g. 4 entrances, 2 entrance gates, 1 entrance), set "architecture.entranceCount".
+- If the user specifies VIP entrance, set "architecture.hasVipEntrance": true.
+- If the user specifies a central sanctum, set "architecture.sanctumPosition": "center".
+- If the user specifies circumambulatory / pradakshina path, set "architecture.hasCircumambulatoryPath": true.
+- If the user specifies queue count (e.g. 3 queue areas, 2 queue zones), set "architecture.queueSystemCount".
+- If the user specifies queue shape (e.g. serpentine, u_shape, arc, radial, parallel), set "template" to that shape.
+
+Propose up to 3 meaningfully different layout options that physically fit within ${site.length}m × ${site.width}m:
+Allowed templates: "parallel", "serpentine", "u_shape", "split", "arc", "radial", "s_shape".
 CRITICAL CONSTRAINT: Total required width (lanes × laneWidth + (lanes - 1) × spacing) MUST be <= ${site.width - 6}m.
-${isLargeCampus ? '' : `For site width ${site.width}m, you MUST NOT exceed ${Math.floor((site.width - 6) / 3.5)} lanes!`}
 
 Respond strictly with this JSON structure:
 {
@@ -71,16 +50,26 @@ Respond strictly with this JSON structure:
       "id": "opt-1",
       "title": "Title describing strategy",
       "intent": {
-        "template": "${exampleTemplate}",
-        "lanes": ${exampleLanes},
+        "template": "parallel",
+        "lanes": 4,
         "laneWidth": 2.0,
         "spacing": 1.5,
-        "entrances": ${exampleEntrances},
-        "exits": ${exampleExits},
+        "entrances": 1,
+        "exits": 1,
         "security": true,
-        "waitingArea": ${exampleWaiting},
-        ${isLargeCampus ? '"multiZone": true,' : ''}
-        "reasoning": "Concise architectural rationale.",
+        "waitingArea": false,
+        "architecture": {
+          "gopuramCount": 2,
+          "gopuramDirections": ["entrance", "main"],
+          "entranceCount": 1,
+          "exitCount": 1,
+          "hasVipEntrance": false,
+          "hasCircumambulatoryPath": false,
+          "sanctumPosition": "center",
+          "sanctumSize": "standard",
+          "queueSystemCount": 1
+        },
+        "reasoning": "Architectural rationale directly explaining how the user prompt was fulfilled.",
         "warnings": []
       }
     }

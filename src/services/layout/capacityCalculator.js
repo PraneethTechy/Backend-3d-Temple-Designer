@@ -3,6 +3,8 @@
  * Deterministic planning metrics for crowd throughput and space utilization.
  */
 
+import { getQueuePathGeometry } from './queuePathGeometry.js';
+
 export const DEFAULT_PLANNING_CONFIG = {
   // Density assumption: 2.0 persons per square meter for comfortable standing queue
   densityPersonsPerSqMeter: 2.0,
@@ -36,7 +38,15 @@ export function calculateQueueCapacity(components = [], peakVisitors = 0, config
   let totalEffectiveLanes = 0;
 
   queueLanes.forEach((q) => {
-    const l = Number(q.dimensions?.length) || 0;
+    let l = Number(q.dimensions?.length) || 0;
+    if (q.properties?.pathData && q.properties.pathData.type !== 'straight') {
+      try {
+        const geom = getQueuePathGeometry(q);
+        if (geom.totalLength > 0) {
+          l = geom.totalLength;
+        }
+      } catch (e) {}
+    }
     const w = Number(q.dimensions?.width) || 0;
     const lanes = Number(q.properties?.lanes) || 1;
 

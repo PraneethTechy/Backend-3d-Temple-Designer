@@ -27,18 +27,55 @@ export function getSiteBounds(site) {
   };
 }
 
+import { getQueuePathGeometry } from './queuePathGeometry.js';
+
 /**
  * Computes axis-aligned bounding box (AABB) for a component on the X/Z ground plane
  */
 export function getComponentAABB(component) {
+  // If queue has custom curve pathData, compute tight bounding box from sampled world points
+  if (component?.type === 'queue' && component.properties?.pathData && component.properties.pathData.type !== 'straight') {
+    try {
+      const geom = getQueuePathGeometry(component);
+      if (geom.worldPoints && geom.worldPoints.length > 0) {
+        const halfW = (component.dimensions?.width || 2) / 2;
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const pt of geom.worldPoints) {
+          if (pt.x < minX) minX = pt.x;
+          if (pt.x > maxX) maxX = pt.x;
+          if (pt.z < minZ) minZ = pt.z;
+          if (pt.z > maxZ) maxZ = pt.z;
+        }
+        minX -= halfW;
+        maxX += halfW;
+        minZ -= halfW;
+        maxZ += halfW;
+        return {
+          centerX: (minX + maxX) / 2,
+          centerZ: (minZ + maxZ) / 2,
+          spanX: maxX - minX,
+          spanZ: maxZ - minZ,
+          minX,
+          maxX,
+          minZ,
+          maxZ,
+        };
+      }
+    } catch (e) {}
+  }
+
   const posX = component.position?.x || 0;
   const posZ = component.position?.z || 0;
 
   const dimL = component.dimensions?.length || 1;
   const dimW = component.dimensions?.width || 1;
 
-  const rotationDeg = component.rotation || 0;
-  const rad = (rotationDeg * Math.PI) / 180;
+  let rad = 0;
+  if (typeof component.rotation === 'number') {
+    rad = (component.rotation * Math.PI) / 180;
+  } else if (component.rotation && typeof component.rotation.y === 'number') {
+    rad = component.rotation.y;
+  }
   const cos = Math.abs(Math.cos(rad));
   const sin = Math.abs(Math.sin(rad));
 

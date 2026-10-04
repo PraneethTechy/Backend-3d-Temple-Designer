@@ -10,7 +10,7 @@ async function test() {
     mode: 'generate',
     allowFallback: true
   };
-  const res = await fetch('http://localhost:5000/api/ai/layout', {
+  const res = await fetch('http://localhost:5001/api/ai/layout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -32,7 +32,7 @@ async function test() {
   });
 
   console.log('\n--- Testing Optimize Mode ---');
-  const optRes = await fetch('http://localhost:5000/api/ai/layout', {
+  const optRes = await fetch('http://localhost:5001/api/ai/layout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

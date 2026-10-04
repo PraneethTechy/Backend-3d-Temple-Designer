@@ -167,8 +167,48 @@ export function generateUShapeLanes(zones, params, genId) {
   }
 
   const armLength = Math.max(6, Math.floor(zones.queueZoneWidth * 0.82));
+  const turnRadius = Math.max(1.5, (totalWidthNeeded - laneWidth) / 2);
   const halfSpanZ = totalWidthNeeded / 2 - laneWidth / 2;
   const components = [];
+
+  // When continuous U-shape requested or single queue system
+  if (params.continuous || params.singleQueue || params.architecture?.queueSystemCount === 1) {
+    components.push({
+      id: `gen-queue-${genId}-ushape`,
+      type: COMPONENT_TYPES.QUEUE,
+      name: 'U-Shape Continuous Queue',
+      position: {
+        x: Math.round(zones.queueCenter.x * 10) / 10,
+        y: 0,
+        z: 0,
+      },
+      rotation: 0,
+      scale: { x: 1, y: 1, z: 1 },
+      dimensions: {
+        length: armLength,
+        width: laneWidth,
+        height: 1.0,
+      },
+      properties: {
+        lanes: 1,
+        direction: 'forward',
+        pathData: {
+          type: 'u_shape',
+          params: {
+            length: armLength,
+            width: totalWidthNeeded,
+            turnRadius,
+          },
+        },
+      },
+      generated: true,
+      generationId: genId,
+      role: 'queue-lane',
+      template: 'u_shape',
+    });
+
+    return { fits: true, components, totalWidthNeeded, queueLength: armLength * 2 + Math.PI * turnRadius };
+  }
 
   // Outbound Arm (Leg 1)
   components.push({
@@ -297,4 +337,148 @@ export function generateSplitLanes(zones, params, genId) {
   }
 
   return { fits: true, components, totalWidthNeeded, queueLength: branchLength * branches };
+}
+
+/**
+ * 5. ARC / CURVED QUEUE TEMPLATE
+ */
+export function generateArcLanes(zones, params, genId) {
+  const laneWidth = Math.max(1.2, parseFloat(params.laneWidth) || 2.2);
+  const lanes = Math.max(1, Math.min(3, parseInt(params.lanes, 10) || 1));
+  const radius = Math.min(zones.usableWidth * 0.45, Math.max(8, zones.queueZoneWidth * 0.4));
+  const sweepAngle = Math.min(80, Math.max(30, parseFloat(params.sweepAngle) || 60));
+
+  const components = [];
+  const arcLength = (radius * sweepAngle * Math.PI) / 180;
+
+  for (let i = 0; i < lanes; i++) {
+    const laneR = radius + (i - (lanes - 1) / 2) * (laneWidth + 1.0);
+    components.push({
+      id: `gen-queue-${genId}-arc-${i + 1}`,
+      type: COMPONENT_TYPES.QUEUE,
+      name: `Curved Arc Lane ${i + 1}`,
+      position: {
+        x: Math.round(zones.queueCenter.x * 10) / 10,
+        y: 0,
+        z: 0,
+      },
+      rotation: 0,
+      scale: { x: 1, y: 1, z: 1 },
+      dimensions: {
+        length: Math.round(arcLength),
+        width: laneWidth,
+        height: 1.0,
+      },
+      properties: {
+        lanes: 1,
+        direction: 'forward',
+        pathData: {
+          type: 'arc',
+          params: {
+            radius: Math.round(laneR),
+            startAngle: -sweepAngle / 2,
+            endAngle: sweepAngle / 2,
+          },
+        },
+      },
+      generated: true,
+      generationId: genId,
+      role: 'queue-lane',
+      template: 'arc',
+    });
+  }
+
+  return { fits: true, components, totalWidthNeeded: laneWidth * lanes, queueLength: Math.round(arcLength * lanes) };
+}
+
+/**
+ * 6. S-SHAPE CONTINUOUS QUEUE TEMPLATE
+ */
+export function generateSShapeLanes(zones, params, genId) {
+  const laneWidth = Math.max(1.2, parseFloat(params.laneWidth) || 2.0);
+  const spanLength = Math.max(8, Math.floor(zones.queueZoneWidth * 0.85));
+  const amplitude = Math.min(zones.usableWidth * 0.6, Math.max(3, spanLength * 0.25));
+
+  const components = [];
+  components.push({
+    id: `gen-queue-${genId}-sshape`,
+    type: COMPONENT_TYPES.QUEUE,
+    name: 'S-Shape Continuous Queue',
+    position: {
+      x: Math.round(zones.queueCenter.x * 10) / 10,
+      y: 0,
+      z: 0,
+    },
+    rotation: 0,
+    scale: { x: 1, y: 1, z: 1 },
+    dimensions: {
+      length: spanLength,
+      width: laneWidth,
+      height: 1.0,
+    },
+    properties: {
+      lanes: 1,
+      direction: 'forward',
+      pathData: {
+        type: 's_shape',
+        params: {
+          length: spanLength,
+          amplitude,
+          cycles: 1.5,
+        },
+      },
+    },
+    generated: true,
+    generationId: genId,
+    role: 'queue-lane',
+    template: 's_shape',
+  });
+
+  return { fits: true, components, totalWidthNeeded: amplitude + laneWidth, queueLength: Math.round(spanLength * 1.3) };
+}
+
+/**
+ * 7. RADIAL APPROACH QUEUE TEMPLATE
+ */
+export function generateRadialLanes(zones, params, genId) {
+  const laneWidth = Math.max(1.2, parseFloat(params.laneWidth) || 2.2);
+  const outerR = Math.max(10, Math.floor(zones.queueZoneWidth * 0.5));
+  const innerR = Math.max(3, Math.floor(outerR * 0.3));
+
+  const components = [];
+  components.push({
+    id: `gen-queue-${genId}-radial`,
+    type: COMPONENT_TYPES.QUEUE,
+    name: 'Radial Darshan Approach Queue',
+    position: {
+      x: Math.round(zones.queueCenter.x * 10) / 10,
+      y: 0,
+      z: 0,
+    },
+    rotation: 0,
+    scale: { x: 1, y: 1, z: 1 },
+    dimensions: {
+      length: outerR - innerR,
+      width: laneWidth,
+      height: 1.0,
+    },
+    properties: {
+      lanes: 1,
+      direction: 'forward',
+      pathData: {
+        type: 'radial',
+        params: {
+          outerRadius: outerR,
+          innerRadius: innerR,
+          sweepAngle: 35,
+        },
+      },
+    },
+    generated: true,
+    generationId: genId,
+    role: 'queue-lane',
+    template: 'radial',
+  });
+
+  return { fits: true, components, totalWidthNeeded: laneWidth * 2, queueLength: Math.round(outerR - innerR) };
 }

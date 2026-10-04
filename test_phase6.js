@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'http://localhost:5001/api';
 
 async function runTests() {
   console.log('--- STARTING PHASE 6 VERIFICATION TEST SUITE ---');

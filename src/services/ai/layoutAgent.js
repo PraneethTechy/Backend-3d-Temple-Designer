@@ -9,6 +9,7 @@ import { callOpenRouterChat, isOpenRouterConfigured } from './openrouter.service
 import { generateProceduralLayout } from '../layout/layoutGenerator.js';
 import { calculateQueueCapacity } from '../layout/capacityCalculator.js';
 import { validateLayout } from '../layout/layoutValidator.js';
+import { extractArchitecturalIntentFromPrompt } from './promptArchitectureExtractor.js';
 
 /**
  * Generates up to 3 diverse AI layout options.
@@ -16,6 +17,7 @@ import { validateLayout } from '../layout/layoutValidator.js';
  */
 export async function generateAiLayoutRecommendations(scene, userRequirement = '', options = {}) {
   const { allowFallback = false } = options;
+  const promptArchitecture = extractArchitecturalIntentFromPrompt(userRequirement, scene.site);
 
   let rawAiResponse;
 
@@ -52,7 +54,7 @@ export async function generateAiLayoutRecommendations(scene, userRequirement = '
 
   if (!rawAiResponse) {
     isFallback = true;
-    validatedData = generateFallbackProposals(scene);
+    validatedData = generateFallbackProposals(scene, userRequirement, promptArchitecture);
   } else {
     // 1. Zod Validation
     const validationResult = LayoutGenerationResponseSchema.safeParse(rawAiResponse);
@@ -60,7 +62,7 @@ export async function generateAiLayoutRecommendations(scene, userRequirement = '
       console.warn('[AI LayoutAgent] Zod validation rejected AI response:', validationResult.error.format());
       if (allowFallback) {
         isFallback = true;
-        validatedData = generateFallbackProposals(scene);
+        validatedData = generateFallbackProposals(scene, userRequirement, promptArchitecture);
       } else {
         return {
           success: false,
@@ -80,6 +82,11 @@ export async function generateAiLayoutRecommendations(scene, userRequirement = '
     const item = validatedData.recommendations[i];
     const intent = item.intent;
 
+    const mergedArchitecture = {
+      ...promptArchitecture,
+      ...(intent.architecture || {}),
+    };
+
     // Convert intent parameters to procedural layout options
     const proceduralOptions = {
       template: intent.template,
@@ -89,7 +96,9 @@ export async function generateAiLayoutRecommendations(scene, userRequirement = '
       includeSecurity: intent.security !== false,
       includeWaitingArea: intent.waitingArea === true,
       includeTempleArchitecture: intent.templeArchitecture !== false,
-      multiZone: intent.multiZone === true || intent.template === 'campus',
+      multiZone: intent.multiZone === true,
+      architecture: mergedArchitecture,
+      prompt: userRequirement,
     };
 
     // 3. Generate layout using existing deterministic procedural engine
@@ -175,127 +184,86 @@ export async function generateAiLayoutRecommendations(scene, userRequirement = '
 }
 
 /**
- * Generates 3 diverse procedural proposals as fallback when AI service is offline
+ * Generates 3 diverse procedural proposals as fallback when AI service is offline.
+ * Directly reflects the user's architectural prompt specifications.
  */
-function generateFallbackProposals(scene) {
+function generateFallbackProposals(scene, userRequirement = '', promptArchitecture = null) {
   const site = scene.site || { length: 50, width: 30 };
+  const arch = promptArchitecture || extractArchitecturalIntentFromPrompt(userRequirement, site);
   const usableWidth = site.width - 6;
-  const isLargeCampus =
-    (site.length >= 140 && site.width >= 100) ||
-    (scene.requirements?.peakVisitors >= 5000);
 
-  if (isLargeCampus) {
-    return {
-      recommendations: [
-        {
-          id: 'opt-campus-fest',
-          title: 'Option A: Distributed Multi-Zone Temple Campus (100K Festival)',
-          intent: {
-            template: 'campus',
-            lanes: 16,
-            laneWidth: 2.0,
-            spacing: 1.5,
-            entrances: 14,
-            exits: 6,
-            security: true,
-            waitingArea: true,
-            multiZone: true,
-            reasoning: 'Deploys 5 Gopurams, 8 distinct queue patterns across Zones A-H, 16 DFMD security channels, holding loops, radial darshan approach, and 60m post-darshan dispersal plaza.',
-            warnings: [],
-          },
-        },
-        {
-          id: 'opt-campus-express',
-          title: 'Option B: Balanced Multi-Stream Festival Campus',
-          intent: {
-            template: 'campus',
-            lanes: 16,
-            laneWidth: 2.0,
-            spacing: 1.5,
-            entrances: 14,
-            exits: 6,
-            security: true,
-            waitingArea: true,
-            multiZone: true,
-            reasoning: 'Calibrated 40% North, 30% West, 30% East arrival streams with separate holding loops, preventing campus gridlock.',
-            warnings: [],
-          },
-        },
-        {
-          id: 'opt-campus-reserve',
-          title: 'Option C: Surge Reserve Multi-Zone Campus',
-          intent: {
-            template: 'campus',
-            lanes: 16,
-            laneWidth: 2.0,
-            spacing: 1.5,
-            entrances: 14,
-            exits: 6,
-            security: true,
-            waitingArea: true,
-            multiZone: true,
-            reasoning: 'Features Zone H dynamic surge overflow reserve bay (44m × 22m loop) with dedicated release gates to absorb peak arrival bursts.',
-            warnings: [],
-          },
-        },
-      ],
-    };
+  const defaultLanes = Math.min(6, Math.max(2, Math.floor(usableWidth / 3.5)));
+  const primaryTemplate = arch.preferredTemplate || 'parallel';
+
+  // Determine diverse secondary and tertiary templates
+  let altTemplate1 = 'serpentine';
+  let altTemplate2 = 'u_shape';
+
+  if (primaryTemplate === 'serpentine') {
+    altTemplate1 = 'parallel';
+    altTemplate2 = 'u_shape';
+  } else if (primaryTemplate === 'u_shape') {
+    altTemplate1 = 'parallel';
+    altTemplate2 = 'serpentine';
+  } else if (primaryTemplate === 'arc' || primaryTemplate === 'radial') {
+    altTemplate1 = 'parallel';
+    altTemplate2 = 'serpentine';
   }
 
-  // Option A: Parallel
-  const parallelLanes = Math.min(6, Math.max(2, Math.floor(usableWidth / 3.5)));
-  // Option B: Serpentine
-  const serpentineLanes = Math.min(5, Math.max(3, Math.floor(usableWidth / 3.2)));
-  // Option C: U-Shape
-  const uShapeLanes = Math.min(4, Math.max(2, Math.floor(usableWidth / 4.0)));
+  const gopuramDesc = `${arch.gopuramCount} Gopuram${arch.gopuramCount > 1 ? 's' : ''}`;
+  const entranceDesc = `${arch.entranceCount} Entrance${arch.entranceCount > 1 ? 's' : ''}`;
+  const sanctumDesc = arch.sanctumPosition === 'center' ? 'Central Sanctum' : 'Sanctum Axis';
 
   return {
     recommendations: [
       {
-        id: 'opt-parallel',
-        title: 'Option A: High-Throughput Parallel',
+        id: 'opt-primary',
+        title: `Option A: ${primaryTemplate.replace('_', '-').toUpperCase()} (${gopuramDesc}, ${sanctumDesc})`,
         intent: {
-          template: 'parallel',
-          lanes: parallelLanes,
+          template: primaryTemplate,
+          lanes: defaultLanes,
           laneWidth: 2.0,
           spacing: 1.5,
-          entrances: 1,
-          exits: 1,
+          entrances: arch.entranceCount,
+          exits: arch.exitCount,
           security: true,
           waitingArea: false,
-          reasoning: 'Parallel channels offer clear linear visibility and rapid barrier management for steady crowds.',
+          architecture: arch,
+          reasoning: `Tailored architecture providing ${gopuramDesc}, ${entranceDesc}, ${arch.exitCount} Exit, and ${sanctumDesc} with ${primaryTemplate.replace('_', '-')} queue layout.`,
           warnings: [],
         },
       },
       {
-        id: 'opt-serpentine',
-        title: 'Option B: Compact High-Density Serpentine',
+        id: 'opt-alt-1',
+        title: `Option B: ${altTemplate1.replace('_', '-').toUpperCase()} (${gopuramDesc}, High Holding)`,
         intent: {
-          template: 'serpentine',
-          lanes: serpentineLanes,
+          template: altTemplate1,
+          lanes: Math.max(2, defaultLanes - (altTemplate1 === 'serpentine' ? 1 : 0)),
           laneWidth: 2.0,
           spacing: 1.2,
-          entrances: 1,
-          exits: 1,
+          entrances: arch.entranceCount,
+          exits: arch.exitCount,
           security: true,
-          waitingArea: false,
-          reasoning: 'Serpentine zig-zag routing maximizes total holding capacity within the site footprint.',
+          waitingArea: true,
+          architecture: arch,
+          reasoning: `High-density queue configuration providing ${gopuramDesc} and continuous flow into ${sanctumDesc}.`,
           warnings: [],
         },
       },
       {
-        id: 'opt-ushape',
-        title: 'Option C: Smooth Continuous U-Shape',
+        id: 'opt-alt-2',
+        title: `Option C: ${altTemplate2.replace('_', '-').toUpperCase()} (${gopuramDesc}, Balanced Flow)`,
         intent: {
-          template: 'u_shape',
-          lanes: uShapeLanes,
+          template: altTemplate2,
+          lanes: Math.max(2, Math.min(4, defaultLanes)),
           laneWidth: 2.2,
           spacing: 1.6,
-          entrances: 1,
-          exits: 1,
+          entrances: arch.entranceCount,
+          exits: arch.exitCount,
           security: true,
           waitingArea: false,
-          reasoning: 'U-shape channel routing provides safe buffer space between inward queue and outward darshan egress.',
+          architecture: arch,
+          reasoning: `Balanced crowd circulation with dedicated ${entranceDesc}, ${gopuramDesc}, and smooth pilgrim dispersal.`,
           warnings: [],
         },
       },
